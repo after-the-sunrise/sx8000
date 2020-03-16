@@ -1,7 +1,6 @@
 plugins {
     id 'java'
     id 'application'
-    id 'com.github.kt3k.coveralls' version '2.10.1'
 }
 
 repositories {
@@ -11,11 +10,14 @@ repositories {
 dependencies {
     implementation 'com.beust:jcommander:1.+'
     implementation 'com.opencsv:opencsv:5.+'
+    implementation 'commons-codec:commons-codec:1.+'
     implementation 'org.apache.commons:commons-compress:1.+'
+    runtimeOnly 'com.h2database:h2:1.+'
+    runtimeOnly 'org.postgresql:postgresql:42.+'
+    runtimeOnly 'mysql:mysql-connector-java:8.+'
     testImplementation 'org.mockito:mockito-core:3.+'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.+'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.+'
-    testRuntimeOnly 'com.h2database:h2:1.4.+'
 }
 
 group 'com.after_sunrise.sx8000'
@@ -26,15 +28,6 @@ targetCompatibility = 1.8
 
 application {
     mainClassName = 'com.after_sunrise.sx8000.Main'
-}
-
-jar {
-    manifest {
-        attributes 'Main-Class': 'com.after_sunrise.sx8000.Main'
-    }
-    from {
-        configurations.compile.collect { it.isDirectory() ? it : zipTree(it) }
-    }
 }
 
 test {
