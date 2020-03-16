@@ -3,10 +3,12 @@ package com.after_sunrise.sx8000;
 import com.beust.jcommander.JCommander;
 import com.beust.jcommander.Parameter;
 import com.opencsv.CSVWriter;
+import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
 import org.apache.commons.compress.utils.CountingOutputStream;
+import org.apache.commons.lang3.ArrayUtils;
 
-import java.io.BufferedOutputStream;
+import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,15 +17,17 @@ import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.security.DigestOutputStream;
+import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.logging.Logger;
@@ -48,15 +52,25 @@ public class Main {
 
         Main main = new Main();
 
-        JCommander.newBuilder().addObject(main).build().parse(args);
+        JCommander commander = JCommander.newBuilder().addObject(main).build();
 
-        main.execute();
+        if (ArrayUtils.isEmpty(args)) {
+
+            commander.usage();
+
+        } else {
+
+            commander.parse(args);
+
+            main.execute();
+
+        }
 
     }
 
     private final Logger logger = Logger.getLogger(getClass().getSimpleName());
 
-    @Parameter(names = {"-d", "--driver"}, description = "JDBC driver class.")
+    @Parameter(names = {"-j", "--driver"}, description = "JDBC driver class.")
     private String jdbcDriver = "org.h2.Driver";
 
     @Parameter(names = {"-u", "--url"}, description = "JDBC URL.")
@@ -66,7 +80,7 @@ public class Main {
     private String jdbcUser = "sa";
 
     @Parameter(names = {"-p", "--pass"}, description = "JDBC login password.")
-    private String jdbcPass = "";
+    private char[] jdbcPass = null;
 
     @Parameter(names = {"-s", "--statement"}, description = "JDBC SQL statement.")
     private String jdbcQuery = "select now() as \"time\"";
@@ -74,13 +88,13 @@ public class Main {
     @Parameter(names = {"-o", "--out"}, description = "File output path.")
     private Path out = Paths.get(System.getProperty("java.io.tmpdir"), String.format("sx8000_%s.csv", System.currentTimeMillis()));
 
-    @Parameter(names = {"-w", "--write"}, description = "File write options.")
-    private StandardOpenOption option = TRUNCATE_EXISTING;
+    @Parameter(names = {"-w", "--write"}, description = "File write mode.")
+    private StandardOpenOption write = TRUNCATE_EXISTING;
 
     @Parameter(names = {"-e", "--encoding"}, description = "File encoding.")
     private String encoding = StandardCharsets.UTF_8.name();
 
-    @Parameter(names = {"-c", "--separator"}, description = "CSV column separator character.")
+    @Parameter(names = {"-d", "--delimiter"}, description = "CSV column delimiter character.")
     private char csvSeparator = CSVWriter.DEFAULT_SEPARATOR;
 
     @Parameter(names = {"-q", "--quote"}, description = "CSV column quote character.")
@@ -98,23 +112,34 @@ public class Main {
     @Parameter(names = {"-f", "--flush"}, description = "Flush per lines.")
     private int flush = 0;
 
+    @Parameter(names = {"-c", "--checksum"}, description = "Generate checksum file.", arity = 1)
+    private boolean checksum = true;
+
+    @Parameter(names = {"-a", "--algorithm"}, description = "Algorithm of the checksum.")
+    private String algorithm = "SHA-256";
+
     void execute() throws Exception {
 
-        logger.info("Initializing : " + jdbcDriver);
+        logger.info("Executing...");
 
         Class.forName(jdbcDriver);
 
+        MessageDigest digest = MessageDigest.getInstance(algorithm);
+
         logger.info(String.format("Connecting : %s (user=%s)", jdbcUrl, jdbcUser));
 
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUser, jdbcPass);
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUser, String.valueOf(ArrayUtils.nullToEmpty(jdbcPass)));
              Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(readQuery(jdbcQuery))) {
 
-            logger.info(String.format("Writing to : %s (option=%s / encoding=%s)", out, option, encoding));
+            logger.info(String.format("Writing to : %s (mode=%s / encoding=%s)", out, write, encoding));
 
-            try (OutputStream os = openOutput(out, CREATE, WRITE, option);
-                 CountingOutputStream co = new CountingOutputStream(os);
-                 Writer writer = new OutputStreamWriter(co, encoding);
+            try (OutputStream os = Files.newOutputStream(out, CREATE, WRITE, write);
+                 DigestOutputStream ds = new DigestOutputStream(os, digest);
+                 CountingOutputStream co = new CountingOutputStream(ds);
+                 Writer writer = new BufferedWriter(new OutputStreamWriter(wrapOutput(out, co), encoding));
                  CSVWriter csv = new CSVWriter(writer, csvSeparator, csvQuoteChar, csvEscapeChar, csvLineEnd)) {
+
+                ds.on(checksum);
 
                 ResultSetMetaData meta = rs.getMetaData();
 
@@ -164,6 +189,18 @@ public class Main {
 
         }
 
+        if (checksum) {
+
+            String hash = Hex.encodeHexString(digest.digest());
+
+            Path path = Paths.get(out + "." + digest.getAlgorithm().replaceAll("-", "").toLowerCase(Locale.US));
+
+            Files.write(path, hash.getBytes(encoding), CREATE, WRITE, write);
+
+            logger.info(String.format("Generated checksum : %s - %s", path, hash));
+
+        }
+
     }
 
     String readQuery(String sql) throws IOException {
@@ -178,12 +215,9 @@ public class Main {
 
             byte[] bytes = new byte[4096];
 
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-
-            ClassLoader loader = Optional.ofNullable(
-                    Thread.currentThread().getContextClassLoader()).orElseGet(Main.class::getClassLoader);
-
-            try (InputStream in = loader.getResourceAsStream(path)) {
+            try (ByteArrayOutputStream out = new ByteArrayOutputStream();
+                 InputStream in = Optional.ofNullable(Thread.currentThread()
+                         .getContextClassLoader()).orElseGet(Main.class::getClassLoader).getResourceAsStream(path)) {
 
                 for (int i = 0; i != -1; i = in.read(bytes)) {
                     out.write(bytes, 0, i);
@@ -211,25 +245,23 @@ public class Main {
 
     }
 
-    OutputStream openOutput(Path path, OpenOption... options) throws IOException {
-
-        OutputStream stream = new BufferedOutputStream(Files.newOutputStream(path, options));
+    OutputStream wrapOutput(Path path, OutputStream out) throws IOException {
 
         String name = path.getFileName().toString();
 
         if (name.endsWith(".deflate")) {
-            return new DeflaterOutputStream(stream);
+            return new DeflaterOutputStream(out);
         }
 
         if (name.endsWith(".gz")) {
-            return new GZIPOutputStream(stream);
+            return new GZIPOutputStream(out);
         }
 
         if (name.endsWith(".bz2")) {
-            return new BZip2CompressorOutputStream(stream);
+            return new BZip2CompressorOutputStream(out);
         }
 
-        return stream;
+        return out;
 
     }
 

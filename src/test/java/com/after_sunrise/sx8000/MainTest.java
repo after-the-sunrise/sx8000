@@ -1,9 +1,10 @@
 package com.after_sunrise.sx8000;
 
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
 import org.junit.jupiter.api.Test;
 
-import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -17,8 +18,6 @@ import java.util.zip.DeflaterOutputStream;
 import java.util.zip.GZIPOutputStream;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
-import static java.nio.file.StandardOpenOption.CREATE;
-import static java.nio.file.StandardOpenOption.WRITE;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -35,8 +34,11 @@ class MainTest {
     void main() throws Exception {
 
         Path path = Paths.get(TEMPDIR, MainTest.class.getSimpleName() + ".csv");
+        Path hash = Paths.get(TEMPDIR, MainTest.class.getSimpleName() + ".csv.sha256");
 
         try {
+
+            Main.main(null);
 
             List<String> options = new ArrayList<>();
             options.add("--out");
@@ -45,18 +47,23 @@ class MainTest {
             options.add("select 'foo bar' as TEST;");
 
             Main.main(options.toArray(new String[0]));
-            assertEquals("\"TEST\"\n\"foo bar\"\n", new String(Files.readAllBytes(path), UTF_8));
+            String content = new String(Files.readAllBytes(path), UTF_8);
+            assertEquals("\"TEST\"\n\"foo bar\"\n", content);
+            assertEquals(DigestUtils.sha256Hex(content), new String(Files.readAllBytes(hash), UTF_8));
 
             options.add("--header");
             options.add("false");
             options.add("--flush");
             options.add("1");
             Main.main(options.toArray(new String[0]));
-            assertEquals("\"foo bar\"\n", new String(Files.readAllBytes(path), UTF_8));
+            content = new String(Files.readAllBytes(path), UTF_8);
+            assertEquals("\"foo bar\"\n", content);
+            assertEquals(DigestUtils.sha256Hex(content), new String(Files.readAllBytes(hash), UTF_8));
 
         } finally {
 
             Files.deleteIfExists(path);
+            Files.deleteIfExists(hash);
 
         }
 
@@ -82,10 +89,10 @@ class MainTest {
     }
 
     @Test
-    void openOutput() throws IOException {
+    void wrapOutput() throws IOException {
 
         Map<String, Class<? extends OutputStream>> outputs = new LinkedHashMap<>();
-        outputs.put(".txt", BufferedOutputStream.class);
+        outputs.put(".txt", ByteArrayOutputStream.class);
         outputs.put(".deflate", DeflaterOutputStream.class);
         outputs.put(".gz", GZIPOutputStream.class);
         outputs.put(".bz2", BZip2CompressorOutputStream.class);
@@ -94,16 +101,12 @@ class MainTest {
 
         for (Map.Entry<String, Class<? extends OutputStream>> entry : outputs.entrySet()) {
 
-            Path path = Paths.get(TEMPDIR, MainTest.class.getSimpleName() + entry.getKey());
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
 
-            try {
+            try (OutputStream wrapped = main.wrapOutput(Paths.get("test" + entry.getKey()), out)) {
 
-                try (OutputStream out = main.openOutput(path, CREATE, WRITE)) {
-                    assertEquals(entry.getValue(), out.getClass(), "Suffix : " + entry.getKey());
-                }
+                assertEquals(entry.getValue(), wrapped.getClass(), "Suffix : " + entry.getKey());
 
-            } finally {
-                Files.deleteIfExists(path);
             }
 
         }
