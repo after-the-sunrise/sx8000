@@ -79,19 +79,19 @@ public class Main {
     @Parameter(names = {"-l", "--user"}, description = "JDBC login user.")
     private String jdbcUser = "sa";
 
-    @Parameter(names = {"-p", "--pass"}, description = "JDBC login password.")
-    private char[] jdbcPass = null;
+    @Parameter(names = {"-p", "--pass"}, description = "JDBC login password. \"classpath:\" or \"filepath:\" prefix can be used to read from a file.")
+    private String jdbcPass = null;
 
-    @Parameter(names = {"-s", "--statement"}, description = "JDBC SQL statement.")
+    @Parameter(names = {"-s", "--statement"}, description = "JDBC SQL statement. \"classpath:\" or \"filepath:\" prefix can be used to read from a file.")
     private String jdbcQuery = "select now() as \"time\"";
 
     @Parameter(names = {"-o", "--out"}, description = "File output path.")
     private Path out = Paths.get(System.getProperty("java.io.tmpdir"), String.format("sx8000_%s.csv", System.currentTimeMillis()));
 
-    @Parameter(names = {"-w", "--write"}, description = "File write mode.")
-    private StandardOpenOption write = TRUNCATE_EXISTING;
+    @Parameter(names = {"-w", "--write"}, description = "File write mode. Specify \"CREATE_NEW\" to fail if the output already exists.")
+    private StandardOpenOption writeMode = TRUNCATE_EXISTING;
 
-    @Parameter(names = {"-e", "--encoding"}, description = "File encoding.")
+    @Parameter(names = {"-e", "--encoding"}, description = "Output file encoding. (cf: \"ISO-8859-1\", \"UTF-16\")")
     private String encoding = StandardCharsets.UTF_8.name();
 
     @Parameter(names = {"-d", "--delimiter"}, description = "CSV column delimiter character.")
@@ -103,19 +103,19 @@ public class Main {
     @Parameter(names = {"-x", "--escape"}, description = "CSV escape character.")
     private char csvEscapeChar = CSVWriter.DEFAULT_ESCAPE_CHARACTER;
 
-    @Parameter(names = {"-t", "--terminator"}, description = "CSV line terminator.")
+    @Parameter(names = {"-t", "--terminator"}, description = "CSV line terminator.", hidden = true)
     private String csvLineEnd = CSVWriter.DEFAULT_LINE_END;
 
     @Parameter(names = {"-h", "--header"}, description = "Include CSV header row.", arity = 1)
     private boolean csvHeader = true;
 
-    @Parameter(names = {"-f", "--flush"}, description = "Flush per lines.")
+    @Parameter(names = {"-f", "--flush"}, description = "Number of lines written to trigger intermediary flush.")
     private int flush = 0;
 
     @Parameter(names = {"-c", "--checksum"}, description = "Generate checksum file.", arity = 1)
     private boolean checksum = true;
 
-    @Parameter(names = {"-a", "--algorithm"}, description = "Algorithm of the checksum.")
+    @Parameter(names = {"-a", "--algorithm"}, description = "Algorithm of the checksum. (cf: \"MD5\", \"SHA-1\")")
     private String algorithm = "SHA-256";
 
     void execute() throws Exception {
@@ -128,12 +128,12 @@ public class Main {
 
         logger.info(String.format("Connecting : %s (user=%s)", jdbcUrl, jdbcUser));
 
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUser, String.valueOf(ArrayUtils.nullToEmpty(jdbcPass)));
-             Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(readQuery(jdbcQuery))) {
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUser, readText(jdbcPass));
+             Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(readText(jdbcQuery))) {
 
-            logger.info(String.format("Writing to : %s (mode=%s / encoding=%s)", out, write, encoding));
+            logger.info(String.format("Writing to : %s (mode=%s / encoding=%s)", out, writeMode, encoding));
 
-            try (OutputStream os = Files.newOutputStream(out, CREATE, WRITE, write);
+            try (OutputStream os = Files.newOutputStream(out, CREATE, WRITE, writeMode);
                  DigestOutputStream ds = new DigestOutputStream(os, digest);
                  CountingOutputStream co = new CountingOutputStream(ds);
                  Writer writer = new BufferedWriter(new OutputStreamWriter(wrapOutput(out, co), encoding));
@@ -195,7 +195,7 @@ public class Main {
 
             Path path = Paths.get(out + "." + digest.getAlgorithm().replaceAll("-", "").toLowerCase(Locale.US));
 
-            Files.write(path, hash.getBytes(encoding), CREATE, WRITE, write);
+            Files.write(path, hash.getBytes(encoding), CREATE, WRITE, writeMode);
 
             logger.info(String.format("Generated checksum : %s - %s", path, hash));
 
@@ -203,15 +203,19 @@ public class Main {
 
     }
 
-    String readQuery(String sql) throws IOException {
+    String readText(String text) throws IOException {
 
-        Matcher cp = Pattern.compile("^(classpath|cp):(.+)").matcher(sql);
+        if (text == null) {
+            return null;
+        }
+
+        Matcher cp = Pattern.compile("^(classpath|cp):(.+)").matcher(text);
 
         if (cp.matches()) {
 
             String path = cp.group(2);
 
-            logger.info("Loading statement from classpath : " + path);
+            logger.info("Reading text from classpath : " + path);
 
             byte[] bytes = new byte[4096];
 
@@ -229,19 +233,19 @@ public class Main {
 
         }
 
-        Matcher fp = Pattern.compile("^file(path)?:(.+)").matcher(sql);
+        Matcher fp = Pattern.compile("^file(path)?:(.+)").matcher(text);
 
         if (fp.matches()) {
 
             String path = fp.group(2);
 
-            logger.info("Loading statement from filepath : " + path);
+            logger.info("Reading text from filepath : " + path);
 
             return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
 
         }
 
-        return sql;
+        return text;
 
     }
 
@@ -266,9 +270,7 @@ public class Main {
     }
 
     boolean shouldFlush(long count, int flush) {
-
         return flush > 0 && count % flush == 0;
-
     }
 
 }

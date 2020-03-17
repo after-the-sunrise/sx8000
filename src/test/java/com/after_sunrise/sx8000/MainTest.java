@@ -70,7 +70,7 @@ class MainTest {
     }
 
     @Test
-    void readQuery() throws IOException {
+    void readText() throws IOException {
 
         List<String> paths = new ArrayList<>();
         paths.add("cp:test.sql");
@@ -81,10 +81,10 @@ class MainTest {
         Main main = new Main();
 
         for (String path : paths) {
-            assertEquals("select now();\n", main.readQuery(path), "Path : " + path);
+            assertEquals("select now();\n", main.readText(path), "Path : " + path);
         }
 
-        assertEquals("foo bar", main.readQuery("foo bar"));
+        assertEquals("foo bar", main.readText("foo bar"));
 
     }
 
