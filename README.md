@@ -5,7 +5,7 @@ sx8000 is a command-line tool for executing **S**QL queries, and e**x**porting t
 This tool is written in pure-Java and utilizes standard JDBC APIs. 
 The name sx8000 comes from the belief that this is probably about the 8000th tool which does something similar. (kudos to [pg8000][pg8000])
 
-* Utilizes Java's standard JDBC API, requiring no additional installations other then the JRE.
+* Utilizes Java's standard JDBC API, requiring no additional installations other then the Java Runtime Environment.
 * JDBC libraries can be added/swapped/removed on the fly.
 * Configurable via launch arguments. No configuration files nor environment variables are required.
 * Query can either be supplied as a one-liner command line argument, or from a text file.
@@ -17,7 +17,7 @@ The name sx8000 comes from the belief that this is probably about the 8000th too
 
 ### Prerequisites
 * JRE 8 or later.
-* JDBC driver library. (`H2` / `PostgreSQL` / `MySQL` drivers are included in the archive.)
+* JDBC driver library. (`Derby` / `H2` / `HSQLDB` / `PostgreSQL` / `MySQL` drivers are included in the archive.)
 
 ### Displaying Usage
 
@@ -25,7 +25,9 @@ Download or build the archive file. Move into the archive's root directory and e
 
 ```shell script
 unzip sx8000-${VERSION}.zip
+
 cd sx-8000-${VERSION}
+
 sh bin/sx8000
 ```
 
