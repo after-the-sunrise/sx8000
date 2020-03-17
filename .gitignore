@@ -17,3 +17,6 @@ out
 # Gradle
 .gradle
 build
+
+# Travis CI
+.ruby-version
