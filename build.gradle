@@ -33,6 +33,14 @@ application {
     mainClassName = 'com.after_sunrise.sx8000.Main'
 }
 
+distributions {
+    main {
+        contents {
+            from(files('README.md', 'LICENSE'))
+        }
+    }
+}
+
 test {
     useJUnitPlatform()
 }

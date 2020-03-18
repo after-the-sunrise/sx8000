@@ -3,7 +3,7 @@
 
 sx8000 is a command-line tool for executing **S**QL queries, and e**x**porting the query results to CSV files. 
 This tool is written in pure-Java and utilizes standard JDBC APIs. 
-The name sx8000 comes from the belief that this is probably about the 8000th tool which does something similar. (kudos to [pg8000][pg8000])
+The name sx8000 comes from the belief that this is probably about the 8000th tool implemented which does something similar. (kudos to [pg8000][pg8000])
 
 * Utilizes Java's standard JDBC API, requiring no additional installations other then the Java Runtime Environment.
 * JDBC libraries can be added/swapped/removed on the fly.
