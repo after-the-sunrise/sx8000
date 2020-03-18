@@ -7,6 +7,7 @@ import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
 import org.apache.commons.compress.utils.CountingOutputStream;
 import org.apache.commons.lang3.ArrayUtils;
+import org.apache.commons.lang3.StringUtils;
 
 import java.io.BufferedWriter;
 import java.io.ByteArrayOutputStream;
@@ -128,7 +129,7 @@ public class Main {
 
         logger.info(String.format("Connecting : %s (user=%s)", jdbcUrl, jdbcUser));
 
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUser, readText(jdbcPass));
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUser, StringUtils.chomp(readText(jdbcPass)));
              Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(readText(jdbcQuery))) {
 
             logger.info(String.format("Writing to : %s (mode=%s / encoding=%s)", out, writeMode, encoding));
