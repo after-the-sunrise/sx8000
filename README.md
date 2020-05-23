@@ -21,7 +21,7 @@ The name sx8000 comes from the belief that this is probably about the 8000th too
 
 ### Displaying Usage
 
-Download or build the archive file. Move into the archive's root directory and execute the launch script.
+[Download][releases] or build the archive file. Move into the archive's root directory and execute the launch script.
 
 ```shell script
 unzip sx8000-${VERSION}.zip
@@ -73,4 +73,6 @@ sx8000 is not...
 
 [travis-page]:https://travis-ci.org/after-the-sunrise/sx8000
 [travis-icon]:https://travis-ci.org/after-the-sunrise/sx8000.svg?branch=master
+[releases]:https://github.com/after-the-sunrise/sx8000/releases
 [pg8000]:https://github.com/tlocke/pg8000
+
