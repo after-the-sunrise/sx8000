@@ -23,11 +23,10 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.security.DigestOutputStream;
 import java.security.MessageDigest;
-import java.sql.Connection;
-import java.sql.DriverManager;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
-import java.sql.Statement;
+import java.sql.*;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
@@ -98,6 +97,9 @@ public class Main {
 		@Parameter(names = {"-n", "--nullReplacement"}, description = "A replacement value for NULL one.")
 		private String nullReplacement = null;
 
+		@Parameter(names = {"--timestampFormatPattern"}, description = "An optional pattern to format Timestamp according to https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html#patterns.")
+		private String timestampFormatPattern = null;
+
 		@Parameter(names = {"-d", "--delimiter"}, description = "CSV column delimiter character.")
     private char csvSeparator = CSVWriter.DEFAULT_SEPARATOR;
 
@@ -147,6 +149,14 @@ public class Main {
 
                 ResultSetMetaData meta = rs.getMetaData();
 
+	              DateTimeFormatter formatter;
+	              if (timestampFormatPattern==null) {
+	              	formatter = null;
+	              } else {
+		              formatter = DateTimeFormatter.ofPattern(timestampFormatPattern).withZone(ZoneId.systemDefault());
+		              logger.info(String.format("Defining a Timestamp formatter which convert Instant.now() as %s", formatter.format(Instant.now())));
+	              }
+
                 String[] values = new String[meta.getColumnCount()];
 
                 if (csvHeader) {
@@ -167,7 +177,14 @@ public class Main {
 
                         Object object = rs.getObject(i + 1);
 
-                        values[i] = Objects.toString(object, nullReplacement);
+                        String value;
+                        if (object != null && formatter!=null && object instanceof Timestamp) {
+	                        value = formatter.format(rs.getTimestamp(i+1).toInstant());
+                        } else {
+                          value = Objects.toString(object, nullReplacement);
+                        }
+
+                        values[i] = value;
 
                     }
 
