@@ -94,6 +94,9 @@ public class Main {
 		@Parameter(names = {"-b", "--booleanAsInt"}, description = "Should boolean be converted to int (0, 1) ?", arity = 1)
 		private boolean booleanAsInt = true;
 
+  	@Parameter(names = {"--quoteAll"}, description = "Should all CSV column be quoted with the quote character ?", arity = 1)
+  	private boolean csvQuoteAll = true;
+
 		@Parameter(names = {"-d", "--delimiter"}, description = "CSV column delimiter character.", converter = CharacterConverter.class)
     private char csvSeparator = CSVWriter.DEFAULT_SEPARATOR;
 
@@ -159,7 +162,7 @@ public class Main {
                         values[i] = meta.getColumnLabel(i + 1);
                     }
 
-                    csv.writeNext(values);
+                    csv.writeNext(values, csvQuoteAll);
 
                 }
 
@@ -188,7 +191,7 @@ public class Main {
 
                     }
 
-                    csv.writeNext(values);
+                    csv.writeNext(values, csvQuoteAll);
 
                     count++;
 
