@@ -95,7 +95,10 @@ public class Main {
     @Parameter(names = {"-e", "--encoding"}, description = "Output file encoding. (cf: \"ISO-8859-1\", \"UTF-16\")")
     private String encoding = StandardCharsets.UTF_8.name();
 
-    @Parameter(names = {"-d", "--delimiter"}, description = "CSV column delimiter character.")
+		@Parameter(names = {"-n", "--nullReplacement"}, description = "A replacement value for NULL one.")
+		private String nullReplacement = null;
+
+		@Parameter(names = {"-d", "--delimiter"}, description = "CSV column delimiter character.")
     private char csvSeparator = CSVWriter.DEFAULT_SEPARATOR;
 
     @Parameter(names = {"-q", "--quote"}, description = "CSV column quote character.")
@@ -164,7 +167,7 @@ public class Main {
 
                         Object object = rs.getObject(i + 1);
 
-                        values[i] = Objects.toString(object, null);
+                        values[i] = Objects.toString(object, nullReplacement);
 
                     }
 
