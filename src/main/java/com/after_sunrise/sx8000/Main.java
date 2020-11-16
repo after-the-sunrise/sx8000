@@ -21,6 +21,7 @@ import java.sql.*;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.logging.Logger;
@@ -39,262 +40,280 @@ import static java.nio.file.StandardOpenOption.*;
  */
 public class Main {
 
-    public static void main(String[] args) throws Exception {
+	public static void main(String[] args) throws Exception {
 
-        Main main = new Main();
+		Main main = new Main();
 
-        JCommander commander = JCommander.newBuilder().addObject(main).build();
+		JCommander commander = JCommander.newBuilder().addObject(main).build();
 
-        if (ArrayUtils.isEmpty(args)) {
+		if (ArrayUtils.isEmpty(args)) {
 
-            commander.usage();
+			commander.usage();
 
-        } else {
+		} else {
 
-            commander.parse(args);
+			commander.parse(args);
 
-            main.execute();
+			main.execute();
 
-        }
+		}
 
-    }
+	}
 
-    private final Logger logger = Logger.getLogger(getClass().getSimpleName());
+	private final Logger logger = Logger.getLogger(getClass().getSimpleName());
 
-    @Parameter(names = {"-j", "--driver"}, description = "JDBC driver class.")
-    private String jdbcDriver = "org.h2.Driver";
+	private DateTimeFormatter timestampFormat;
 
-    @Parameter(names = {"-u", "--url"}, description = "JDBC URL.")
-    private String jdbcUrl = "jdbc:h2:mem:";
+	@Parameter(names = {"-j", "--driver"}, description = "JDBC driver class.")
+	private String jdbcDriver = "org.h2.Driver";
 
-    @Parameter(names = {"-l", "--user"}, description = "JDBC login user.")
-    private String jdbcUser = "sa";
+	@Parameter(names = {"-u", "--url"}, description = "JDBC URL.")
+	private String jdbcUrl = "jdbc:h2:mem:";
 
-    @Parameter(names = {"-p", "--pass"}, description = "JDBC login password. \"classpath:\" or \"filepath:\" prefix can be used to read from a file.")
-    private String jdbcPass = null;
+	@Parameter(names = {"-l", "--user"}, description = "JDBC login user.")
+	private String jdbcUser = "sa";
 
-    @Parameter(names = {"-s", "--statement"}, description = "JDBC SQL statement. \"classpath:\" or \"filepath:\" prefix can be used to read from a file.")
-    private String jdbcQuery = "select now() as \"time\"";
+	@Parameter(names = {"-p", "--pass"}, description = "JDBC login password. \"classpath:\" or \"filepath:\" prefix can be used to read from a file.")
+	private String jdbcPass = null;
 
-    @Parameter(names = {"-o", "--out"}, description = "File output path.")
-    private Path out = Paths.get(System.getProperty("java.io.tmpdir"), String.format("sx8000_%s.csv", System.currentTimeMillis()));
+	@Parameter(names = {"-s", "--statement"}, description = "JDBC SQL statement. \"classpath:\" or \"filepath:\" prefix can be used to read from a file.")
+	private String jdbcQuery = "select now() as \"time\"";
 
-    @Parameter(names = {"-w", "--write"}, description = "File write mode. Specify \"CREATE_NEW\" to fail if the output already exists.")
-    private StandardOpenOption writeMode = TRUNCATE_EXISTING;
+	@Parameter(names = {"-o", "--out"}, description = "File output path.")
+	private Path out = Paths.get(System.getProperty("java.io.tmpdir"), String.format("sx8000_%s.csv", System.currentTimeMillis()));
 
-    @Parameter(names = {"-e", "--encoding"}, description = "Output file encoding. (cf: \"ISO-8859-1\", \"UTF-16\")")
-    private String encoding = StandardCharsets.UTF_8.name();
+	@Parameter(names = {"-w", "--write"}, description = "File write mode. Specify \"CREATE_NEW\" to fail if the output already exists.")
+	private StandardOpenOption writeMode = TRUNCATE_EXISTING;
 
-		@Parameter(names = {"-n", "--nullReplacement"}, description = "A replacement value for NULL one.")
-		private String nullReplacement = null;
+	@Parameter(names = {"-e", "--encoding"}, description = "Output file encoding. (cf: \"ISO-8859-1\", \"UTF-16\")")
+	private String encoding = StandardCharsets.UTF_8.name();
 
-		@Parameter(names = {"--timestampFormatPattern"}, description = "An optional pattern to format Timestamp according to https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html#patterns.")
-		private String timestampFormatPattern = null;
+	@Parameter(names = {"-n", "--nullReplacement"}, description = "A replacement value for NULL one.")
+	private String nullReplacement = null;
 
-		@Parameter(names = {"-b", "--booleanAsInt"}, description = "Should boolean be converted to int (0, 1) ?", arity = 1)
-		private boolean booleanAsInt = true;
+	@Parameter(names = {"--timestampFormatPattern"}, description = "An optional pattern to format Timestamp according to https://docs.oracle.com/javase/8/docs/api/java/time/format/DateTimeFormatter.html#patterns.")
+	private String timestampFormatPattern = null;
 
-  	@Parameter(names = {"--quoteAll"}, description = "Should all CSV column be quoted with the quote character ?", arity = 1)
-  	private boolean csvQuoteAll = true;
+	@Parameter(names = {"-b", "--booleanAsInt"}, description = "Should boolean be converted to int (0, 1) ?", arity = 1)
+	private boolean booleanAsInt = true;
 
-		@Parameter(names = {"-d", "--delimiter"}, description = "CSV column delimiter character.", converter = CharacterConverter.class)
-    private char csvSeparator = CSVWriter.DEFAULT_SEPARATOR;
+	@Parameter(names = {"--arrayInSquareBrackets"}, description = "Should array values be enclosed in square brackets ?", arity = 1)
+	private boolean arrayInSquareBrackets = true;
 
-    @Parameter(names = {"-q", "--quote"}, description = "CSV column quote character.", converter = CharacterConverter.class)
-    private char csvQuoteChar = CSVWriter.DEFAULT_QUOTE_CHARACTER;
+	@Parameter(names = {"--quoteAll"}, description = "Should all CSV column be quoted with the quote character ?", arity = 1)
+	private boolean csvQuoteAll = true;
 
-    @Parameter(names = {"-x", "--escape"}, description = "CSV escape character.", converter = CharacterConverter.class)
-    private char csvEscapeChar = CSVWriter.DEFAULT_ESCAPE_CHARACTER;
+	@Parameter(names = {"-d", "--delimiter"}, description = "CSV column delimiter character.", converter = CharacterConverter.class)
+	private char csvSeparator = CSVWriter.DEFAULT_SEPARATOR;
 
-    @Parameter(names = {"-t", "--terminator"}, description = "CSV line terminator.", hidden = true)
-    private String csvLineEnd = CSVWriter.DEFAULT_LINE_END;
+	@Parameter(names = {"-q", "--quote"}, description = "CSV column quote character.", converter = CharacterConverter.class)
+	private char csvQuoteChar = CSVWriter.DEFAULT_QUOTE_CHARACTER;
 
-    @Parameter(names = {"-h", "--header"}, description = "Include CSV header row.", arity = 1)
-    private boolean csvHeader = true;
+	@Parameter(names = {"-x", "--escape"}, description = "CSV escape character.", converter = CharacterConverter.class)
+	private char csvEscapeChar = CSVWriter.DEFAULT_ESCAPE_CHARACTER;
 
-    @Parameter(names = {"-f", "--flush"}, description = "Number of lines written to trigger intermediary flush.")
-    private int flush = 0;
+	@Parameter(names = {"-t", "--terminator"}, description = "CSV line terminator.", hidden = true)
+	private String csvLineEnd = CSVWriter.DEFAULT_LINE_END;
 
-    @Parameter(names = {"-c", "--checksum"}, description = "Generate checksum file.", arity = 1)
-    private boolean checksum = true;
+	@Parameter(names = {"-h", "--header"}, description = "Include CSV header row.", arity = 1)
+	private boolean csvHeader = true;
 
-    @Parameter(names = {"-a", "--algorithm"}, description = "Algorithm of the checksum. (cf: \"MD5\", \"SHA-1\")")
-    private String algorithm = "SHA-256";
+	@Parameter(names = {"-f", "--flush"}, description = "Number of lines written to trigger intermediary flush.")
+	private int flush = 0;
 
-    void execute() throws Exception {
+	@Parameter(names = {"-c", "--checksum"}, description = "Generate checksum file.", arity = 1)
+	private boolean checksum = true;
 
-        logger.info("Executing...");
+	@Parameter(names = {"-a", "--algorithm"}, description = "Algorithm of the checksum. (cf: \"MD5\", \"SHA-1\")")
+	private String algorithm = "SHA-256";
 
-        Class.forName(jdbcDriver);
+	void execute() throws Exception {
 
-        MessageDigest digest = MessageDigest.getInstance(algorithm);
+		logger.info("Executing...");
 
-        logger.info(String.format("Connecting : %s (user=%s)", jdbcUrl, jdbcUser));
+		Class.forName(jdbcDriver);
 
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUser, StringUtils.chomp(readText(jdbcPass)));
-             Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(readText(jdbcQuery))) {
+		MessageDigest digest = MessageDigest.getInstance(algorithm);
 
-            logger.info(String.format("Writing to : %s (mode=%s / encoding=%s)", out, writeMode, encoding));
+		logger.info(String.format("Connecting : %s (user=%s)", jdbcUrl, jdbcUser));
 
-            try (OutputStream os = Files.newOutputStream(out, CREATE, WRITE, writeMode);
-                 DigestOutputStream ds = new DigestOutputStream(os, digest);
-                 CountingOutputStream co = new CountingOutputStream(ds);
-                 Writer writer = new BufferedWriter(new OutputStreamWriter(wrapOutput(out, co), encoding));
-                 CSVWriter csv = new CSVWriter(writer, csvSeparator, csvQuoteChar, csvEscapeChar, csvLineEnd)) {
+		try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUser, StringUtils.chomp(readText(jdbcPass)));
+		     Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(readText(jdbcQuery))) {
 
-                ds.on(checksum);
+			logger.info(String.format("Writing to : %s (mode=%s / encoding=%s)", out, writeMode, encoding));
 
-                ResultSetMetaData meta = rs.getMetaData();
+			try (OutputStream os = Files.newOutputStream(out, CREATE, WRITE, writeMode);
+			     DigestOutputStream ds = new DigestOutputStream(os, digest);
+			     CountingOutputStream co = new CountingOutputStream(ds);
+			     Writer writer = new BufferedWriter(new OutputStreamWriter(wrapOutput(out, co), encoding));
+			     CSVWriter csv = new CSVWriter(writer, csvSeparator, csvQuoteChar, csvEscapeChar, csvLineEnd) {
+				     @Override
+				     protected boolean stringContainsSpecialCharacters(String v) {
+					     return v!=nullReplacement && (
+					     				super.stringContainsSpecialCharacters(v)
+												      || v.indexOf('\'') != -1
+												      || v.indexOf('\\') != -1
+									            || v.startsWith("[")
+					     );
+				     }
+			     }) {
 
-	              DateTimeFormatter formatter;
-	              if (timestampFormatPattern==null) {
-	              	formatter = null;
-	              } else {
-		              formatter = DateTimeFormatter.ofPattern(timestampFormatPattern).withZone(ZoneId.systemDefault());
-		              logger.info(String.format("Defining a Timestamp formatter which convert Instant.now() as %s", formatter.format(Instant.now())));
-	              }
+				ds.on(checksum);
 
-                String[] values = new String[meta.getColumnCount()];
+				ResultSetMetaData meta = rs.getMetaData();
 
-                if (csvHeader) {
+				if (timestampFormatPattern != null) {
+					timestampFormat = DateTimeFormatter.ofPattern(timestampFormatPattern).withZone(ZoneId.systemDefault());
+					logger.info(String.format("Defining a Timestamp formatter which convert Instant.now() as %s", timestampFormat.format(Instant.now())));
+				}
 
-                    for (int i = 0; i < meta.getColumnCount(); i++) {
-                        values[i] = meta.getColumnLabel(i + 1);
-                    }
+				String[] values = new String[meta.getColumnCount()];
 
-                    csv.writeNext(values, csvQuoteAll);
+				if (csvHeader) {
 
-                }
+					for (int i = 0; i < meta.getColumnCount(); i++) {
+						values[i] = meta.getColumnLabel(i + 1);
+					}
 
-                long count = 0;
+					csv.writeNext(values, csvQuoteAll);
 
-                while (rs.next()) {
+				}
 
-                    for (int i = 0; i < values.length; i++) {
+				long count = 0;
 
-                        Object object = rs.getObject(i + 1);
+				while (rs.next()) {
 
-                        String value;
-                        if (object == null) {
-                        	  value = nullReplacement;
-                        } else {
-		                        if (formatter!=null && object instanceof Timestamp) {
-			                          value = formatter.format(rs.getTimestamp(i+1).toInstant());
-		                        } else if (booleanAsInt && object instanceof Boolean) {
-		                            value = ((Boolean) object) ? "1" : "0";
-		                        } else {
-			                          value = object.toString();
-		                        }
-                        }
+					for (int i = 0; i < values.length; i++) {
 
-                        values[i] = value;
+						values[i] = formatValue(rs.getObject(i + 1));
 
-                    }
+					}
 
-                    csv.writeNext(values, csvQuoteAll);
+					csv.writeNext(values, csvQuoteAll);
 
-                    count++;
+					count++;
 
-                    if (shouldFlush(count, flush)) {
+					if (shouldFlush(count, flush)) {
 
-                        csv.flush();
+						csv.flush();
 
-                        logger.info(String.format("Flushed %,3d lines... (%,3d bytes)", count, co.getBytesWritten()));
+						logger.info(String.format("Flushed %,3d lines... (%,3d bytes)", count, co.getBytesWritten()));
 
-                    }
+					}
 
-                }
+				}
 
-                csv.flush();
+				csv.flush();
 
-                logger.info(String.format("Finished output : %,3d lines (%,3d bytes)", count, co.getBytesWritten()));
+				logger.info(String.format("Finished output : %,3d lines (%,3d bytes)", count, co.getBytesWritten()));
 
-            }
+			}
 
-        }
+		}
 
-        if (checksum) {
+		if (checksum) {
 
-            String hash = Hex.encodeHexString(digest.digest());
+			String hash = Hex.encodeHexString(digest.digest());
 
-            Path path = Paths.get(out + "." + digest.getAlgorithm().replaceAll("-", "").toLowerCase(Locale.US));
+			Path path = Paths.get(out + "." + digest.getAlgorithm().replaceAll("-", "").toLowerCase(Locale.US));
 
-            Files.write(path, hash.getBytes(encoding), CREATE, WRITE, writeMode);
+			Files.write(path, hash.getBytes(encoding), CREATE, WRITE, writeMode);
 
-            logger.info(String.format("Generated checksum : %s - %s", path, hash));
+			logger.info(String.format("Generated checksum : %s - %s", path, hash));
 
-        }
+		}
 
-    }
+	}
 
-    String readText(String text) throws IOException {
+	String formatValue(Object object) {
+		if (object == null) {
+			return nullReplacement;
+		} else {
+			if (timestampFormat != null && object instanceof Timestamp) {
+				return timestampFormat.format(((Timestamp) object).toInstant());
+			} else if (arrayInSquareBrackets && object instanceof Array) {
+				final int length = java.lang.reflect.Array.getLength(object);
+				final String[] values = new String[length];
+				for (int i=0 ; i<length; i++) {
+					values[i] =	formatValue(java.lang.reflect.Array.get(object, i));
+				}
+				return "[" + StringUtils.join(values,",") + "]";
+			} else if (booleanAsInt && object instanceof Boolean) {
+				return ((Boolean) object) ? "1" : "0";
+			} else {
+				return object.toString();
+			}
+		}
+	}
 
-        if (text == null) {
-            return null;
-        }
+	String readText(String text) throws IOException {
 
-        Matcher cp = Pattern.compile("^(classpath|cp):(.+)").matcher(text);
+		if (text == null) {
+			return null;
+		}
 
-        if (cp.matches()) {
+		Matcher cp = Pattern.compile("^(classpath|cp):(.+)").matcher(text);
 
-            String path = cp.group(2);
+		if (cp.matches()) {
 
-            logger.info("Reading text from classpath : " + path);
+			String path = cp.group(2);
 
-            byte[] bytes = new byte[4096];
+			logger.info("Reading text from classpath : " + path);
 
-            try (ByteArrayOutputStream out = new ByteArrayOutputStream();
-                 InputStream in = Optional.ofNullable(Thread.currentThread()
-                         .getContextClassLoader()).orElseGet(Main.class::getClassLoader).getResourceAsStream(path)) {
+			byte[] bytes = new byte[4096];
 
-                for (int i = 0; i != -1; i = in.read(bytes)) {
-                    out.write(bytes, 0, i);
-                }
+			try (ByteArrayOutputStream out = new ByteArrayOutputStream();
+			     InputStream in = Optional.ofNullable(Thread.currentThread()
+							     .getContextClassLoader()).orElseGet(Main.class::getClassLoader).getResourceAsStream(path)) {
 
-                return new String(out.toByteArray(), StandardCharsets.UTF_8);
+				for (int i = 0; i != -1; i = in.read(bytes)) {
+					out.write(bytes, 0, i);
+				}
 
-            }
+				return new String(out.toByteArray(), StandardCharsets.UTF_8);
 
-        }
+			}
 
-        Matcher fp = Pattern.compile("^file(path)?:(.+)").matcher(text);
+		}
 
-        if (fp.matches()) {
+		Matcher fp = Pattern.compile("^file(path)?:(.+)").matcher(text);
 
-            String path = fp.group(2);
+		if (fp.matches()) {
 
-            logger.info("Reading text from filepath : " + path);
+			String path = fp.group(2);
 
-            return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
+			logger.info("Reading text from filepath : " + path);
 
-        }
+			return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
 
-        return text;
+		}
 
-    }
+		return text;
 
-    OutputStream wrapOutput(Path path, OutputStream out) throws IOException {
+	}
 
-        String name = path.getFileName().toString();
+	OutputStream wrapOutput(Path path, OutputStream out) throws IOException {
 
-        if (name.endsWith(".deflate")) {
-            return new DeflaterOutputStream(out);
-        }
+		String name = path.getFileName().toString();
 
-        if (name.endsWith(".gz")) {
-            return new GZIPOutputStream(out);
-        }
+		if (name.endsWith(".deflate")) {
+			return new DeflaterOutputStream(out);
+		}
 
-        if (name.endsWith(".bz2")) {
-            return new BZip2CompressorOutputStream(out);
-        }
+		if (name.endsWith(".gz")) {
+			return new GZIPOutputStream(out);
+		}
 
-        return out;
+		if (name.endsWith(".bz2")) {
+			return new BZip2CompressorOutputStream(out);
+		}
 
-    }
+		return out;
 
-    boolean shouldFlush(long count, int flush) {
-        return flush > 0 && count % flush == 0;
-    }
+	}
+
+	boolean shouldFlush(long count, int flush) {
+		return flush > 0 && count % flush == 0;
+	}
 
 }
