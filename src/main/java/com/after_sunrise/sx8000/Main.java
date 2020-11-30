@@ -86,6 +86,15 @@ public class Main {
     @Parameter(names = {"-s", "--statement"}, description = "JDBC SQL statement. \"classpath:\" or \"filepath:\" prefix can be used to read from a file.")
     private String jdbcQuery = "select now() as \"time\"";
 
+    @Parameter(names = {"-m", "--commit"}, description = "JDBC auto commit flag.")
+    private boolean jdbcAutoCommit = false;
+
+    @Parameter(names = {"-r", "--read"}, description = "JDBC read only flag.")
+    private boolean jdbcReadOnly = true;
+
+    @Parameter(names = {"-b", "--batch"}, description = "JDBC fetch batch size.")
+    private int jdbcFetchSize = 1024;
+
     @Parameter(names = {"-o", "--out"}, description = "File output path.")
     private Path out = Paths.get(System.getProperty("java.io.tmpdir"), String.format("sx8000_%s.csv", System.currentTimeMillis()));
 
@@ -129,62 +138,75 @@ public class Main {
 
         logger.info(String.format("Connecting : %s (user=%s)", jdbcUrl, jdbcUser));
 
-        try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUser, StringUtils.chomp(readText(jdbcPass)));
-             Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(readText(jdbcQuery))) {
+        try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUser, StringUtils.chomp(readText(jdbcPass)))) {
 
-            logger.info(String.format("Writing to : %s (mode=%s / encoding=%s)", out, writeMode, encoding));
+            conn.setAutoCommit(jdbcAutoCommit);
 
-            try (OutputStream os = Files.newOutputStream(out, CREATE, WRITE, writeMode);
-                 DigestOutputStream ds = new DigestOutputStream(os, digest);
-                 CountingOutputStream co = new CountingOutputStream(ds);
-                 Writer writer = new BufferedWriter(new OutputStreamWriter(wrapOutput(out, co), encoding));
-                 CSVWriter csv = new CSVWriter(writer, csvSeparator, csvQuoteChar, csvEscapeChar, csvLineEnd)) {
+            conn.setReadOnly(jdbcReadOnly);
 
-                ds.on(checksum);
+            try (Statement stmt = conn.createStatement()) {
 
-                ResultSetMetaData meta = rs.getMetaData();
+                stmt.setFetchSize(jdbcFetchSize);
 
-                String[] values = new String[meta.getColumnCount()];
+                try (ResultSet rs = stmt.executeQuery(readText(jdbcQuery))) {
 
-                if (csvHeader) {
+                    logger.info(String.format("Writing to : %s ResultSet(mode=%s / encoding=%s)", out, writeMode, encoding));
 
-                    for (int i = 0; i < meta.getColumnCount(); i++) {
-                        values[i] = meta.getColumnLabel(i + 1);
-                    }
+                    try (OutputStream os = Files.newOutputStream(out, CREATE, WRITE, writeMode);
+                         DigestOutputStream ds = new DigestOutputStream(os, digest);
+                         CountingOutputStream co = new CountingOutputStream(ds);
+                         Writer writer = new BufferedWriter(new OutputStreamWriter(wrapOutput(out, co), encoding));
+                         CSVWriter csv = new CSVWriter(writer, csvSeparator, csvQuoteChar, csvEscapeChar, csvLineEnd)) {
 
-                    csv.writeNext(values);
+                        ds.on(checksum);
 
-                }
+                        ResultSetMetaData meta = rs.getMetaData();
 
-                long count = 0;
+                        String[] values = new String[meta.getColumnCount()];
 
-                while (rs.next()) {
+                        if (csvHeader) {
 
-                    for (int i = 0; i < values.length; i++) {
+                            for (int i = 0; i < meta.getColumnCount(); i++) {
+                                values[i] = meta.getColumnLabel(i + 1);
+                            }
 
-                        Object object = rs.getObject(i + 1);
+                            csv.writeNext(values);
 
-                        values[i] = Objects.toString(object, null);
+                        }
 
-                    }
+                        long count = 0;
 
-                    csv.writeNext(values);
+                        while (rs.next()) {
 
-                    count++;
+                            for (int i = 0; i < values.length; i++) {
 
-                    if (shouldFlush(count, flush)) {
+                                Object object = rs.getObject(i + 1);
+
+                                values[i] = Objects.toString(object, null);
+
+                            }
+
+                            csv.writeNext(values);
+
+                            count++;
+
+                            if (shouldFlush(count, flush)) {
+
+                                csv.flush();
+
+                                logger.info(String.format("Flushed %,3d lines... (%,3d bytes)", count, co.getBytesWritten()));
+
+                            }
+
+                        }
 
                         csv.flush();
 
-                        logger.info(String.format("Flushed %,3d lines... (%,3d bytes)", count, co.getBytesWritten()));
+                        logger.info(String.format("Finished output : %,3d lines (%,3d bytes)", count, co.getBytesWritten()));
 
                     }
 
                 }
-
-                csv.flush();
-
-                logger.info(String.format("Finished output : %,3d lines (%,3d bytes)", count, co.getBytesWritten()));
 
             }
 
