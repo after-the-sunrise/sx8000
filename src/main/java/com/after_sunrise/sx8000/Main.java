@@ -40,23 +40,14 @@ import static java.nio.file.StandardOpenOption.*;
 public class Main {
 
 	public static void main(String[] args) throws Exception {
-
 		Main main = new Main();
-
 		JCommander commander = JCommander.newBuilder().addObject(main).build();
-
 		if (ArrayUtils.isEmpty(args)) {
-
 			commander.usage();
-
 		} else {
-
 			commander.parse(args);
-
 			main.execute();
-
 		}
-
 	}
 
 	private final Logger logger = Logger.getLogger(getClass().getSimpleName());
@@ -127,15 +118,12 @@ public class Main {
 	private String algorithm = "SHA-256";
 
 	void execute() throws Exception {
-
 		logger.info("Executing...");
 
 		Class.forName(jdbcDriver);
-
 		MessageDigest digest = MessageDigest.getInstance(algorithm);
 
 		logger.info(String.format("Connecting : %s (user=%s)", jdbcUrl, jdbcUser));
-
 		try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUser, StringUtils.chomp(readText(jdbcPass)));
 		     Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(readText(jdbcQuery))) {
 
@@ -148,11 +136,11 @@ public class Main {
 			     CSVWriter csv = new CSVWriter(writer, csvSeparator, csvQuoteChar, csvEscapeChar, csvLineEnd) {
 				     @Override
 				     protected boolean stringContainsSpecialCharacters(String v) {
-					     return v!=nullReplacement && (
-					     				super.stringContainsSpecialCharacters(v)
-												      || v.indexOf('\'') != -1
-												      || v.indexOf('\\') != -1
-									            || v.startsWith("[")
+					     return v != nullReplacement && (
+							     super.stringContainsSpecialCharacters(v)
+									     || v.indexOf('\'') != -1
+									     || v.indexOf('\\') != -1
+									     || v.startsWith("[")
 					     );
 				     }
 			     }) {
@@ -169,59 +157,36 @@ public class Main {
 				String[] values = new String[meta.getColumnCount()];
 
 				if (csvHeader) {
-
 					for (int i = 0; i < meta.getColumnCount(); i++) {
 						values[i] = meta.getColumnLabel(i + 1);
 					}
-
 					csv.writeNext(values, csvQuoteAll);
-
 				}
 
 				long count = 0;
-
 				while (rs.next()) {
-
 					for (int i = 0; i < values.length; i++) {
-
 						values[i] = formatValue(rs.getObject(i + 1), i + 1, meta);
-
 					}
-
 					csv.writeNext(values, csvQuoteAll);
-
 					count++;
-
 					if (shouldFlush(count, flush)) {
-
 						csv.flush();
-
 						logger.info(String.format("Flushed %,3d lines... (%,3d bytes)", count, co.getBytesWritten()));
-
 					}
-
 				}
 
 				csv.flush();
-
 				logger.info(String.format("Finished output : %,3d lines (%,3d bytes)", count, co.getBytesWritten()));
-
 			}
-
 		}
 
 		if (checksum) {
-
 			String hash = Hex.encodeHexString(digest.digest());
-
 			Path path = Paths.get(out + "." + digest.getAlgorithm().replaceAll("-", "").toLowerCase(Locale.US));
-
 			Files.write(path, hash.getBytes(encoding), CREATE, WRITE, writeMode);
-
 			logger.info(String.format("Generated checksum : %s - %s", path, hash));
-
 		}
-
 	}
 
 	String formatValue(Object object, int columnIndex, ResultSetMetaData meta) throws SQLException {
@@ -238,10 +203,10 @@ public class Main {
 				final Object javaArray = ((Array) object).getArray();
 				final int length = java.lang.reflect.Array.getLength(javaArray);
 				final String[] values = new String[length];
-				for (int i=0 ; i<length; i++) {
-					values[i] =	formatValue(java.lang.reflect.Array.get(javaArray, i), i, meta);
+				for (int i = 0; i < length; i++) {
+					values[i] = formatValue(java.lang.reflect.Array.get(javaArray, i), i, meta);
 				}
-				return "[" + StringUtils.join(values,",") + "]";
+				return "[" + StringUtils.join(values, ",") + "]";
 			} else if (booleanAsInt && object instanceof Boolean) {
 				return ((Boolean) object) ? "1" : "0";
 			} else {
@@ -251,7 +216,6 @@ public class Main {
 	}
 
 	String readText(String text) throws IOException {
-
 		if (text == null) {
 			return null;
 		}
@@ -259,61 +223,41 @@ public class Main {
 		Matcher cp = Pattern.compile("^(classpath|cp):(.+)").matcher(text);
 
 		if (cp.matches()) {
-
 			String path = cp.group(2);
-
 			logger.info("Reading text from classpath : " + path);
-
 			byte[] bytes = new byte[4096];
-
 			try (ByteArrayOutputStream out = new ByteArrayOutputStream();
 			     InputStream in = Optional.ofNullable(Thread.currentThread()
-							     .getContextClassLoader()).orElseGet(Main.class::getClassLoader).getResourceAsStream(path)) {
-
+					     .getContextClassLoader()).orElseGet(Main.class::getClassLoader).getResourceAsStream(path)) {
 				for (int i = 0; i != -1; i = in.read(bytes)) {
 					out.write(bytes, 0, i);
 				}
-
 				return new String(out.toByteArray(), StandardCharsets.UTF_8);
-
 			}
-
 		}
 
 		Matcher fp = Pattern.compile("^file(path)?:(.+)").matcher(text);
-
 		if (fp.matches()) {
-
 			String path = fp.group(2);
-
 			logger.info("Reading text from filepath : " + path);
-
 			return new String(Files.readAllBytes(Paths.get(path)), StandardCharsets.UTF_8);
-
 		}
 
 		return text;
-
 	}
 
 	OutputStream wrapOutput(Path path, OutputStream out) throws IOException {
-
 		String name = path.getFileName().toString();
-
 		if (name.endsWith(".deflate")) {
 			return new DeflaterOutputStream(out);
 		}
-
 		if (name.endsWith(".gz")) {
 			return new GZIPOutputStream(out);
 		}
-
 		if (name.endsWith(".bz2")) {
 			return new BZip2CompressorOutputStream(out);
 		}
-
 		return out;
-
 	}
 
 	boolean shouldFlush(long count, int flush) {
