@@ -21,7 +21,6 @@ import java.sql.*;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.Arrays;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.logging.Logger;
@@ -185,7 +184,7 @@ public class Main {
 
 					for (int i = 0; i < values.length; i++) {
 
-						values[i] = formatValue(rs.getObject(i + 1));
+						values[i] = formatValue(rs.getObject(i + 1), i + 1, meta);
 
 					}
 
@@ -225,17 +224,22 @@ public class Main {
 
 	}
 
-	String formatValue(Object object) {
+	String formatValue(Object object, int columnIndex, ResultSetMetaData meta) throws SQLException {
 		if (object == null) {
-			return nullReplacement;
+			if (arrayInSquareBrackets && meta.getColumnType(columnIndex) == Types.ARRAY) {
+				return "[]";
+			} else {
+				return nullReplacement;
+			}
 		} else {
 			if (timestampFormat != null && object instanceof Timestamp) {
 				return timestampFormat.format(((Timestamp) object).toInstant());
 			} else if (arrayInSquareBrackets && object instanceof Array) {
-				final int length = java.lang.reflect.Array.getLength(object);
+				final Object javaArray = ((Array) object).getArray();
+				final int length = java.lang.reflect.Array.getLength(javaArray);
 				final String[] values = new String[length];
 				for (int i=0 ; i<length; i++) {
-					values[i] =	formatValue(java.lang.reflect.Array.get(object, i));
+					values[i] =	formatValue(java.lang.reflect.Array.get(javaArray, i), i, meta);
 				}
 				return "[" + StringUtils.join(values,",") + "]";
 			} else if (booleanAsInt && object instanceof Boolean) {
