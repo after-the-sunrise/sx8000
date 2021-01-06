@@ -23,6 +23,7 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.logging.Logger;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -69,8 +70,8 @@ public class Main {
 	@Parameter(names = {"-s", "--statement"}, description = "JDBC SQL statement. \"classpath:\" or \"filepath:\" prefix can be used to read from a file.")
 	private String jdbcQuery = "select now() as \"time\"";
 
-	@Parameter(names = {"-o", "--out"}, description = "File output path.")
-	private Path out = Paths.get(System.getProperty("java.io.tmpdir"), String.format("sx8000_%s.csv", System.currentTimeMillis()));
+	@Parameter(names = {"-o", "--out"}, description = "File output path. To output to stdin pass \"-\".")
+	private String outReq = "-";
 
 	@Parameter(names = {"-w", "--write"}, description = "File write mode. Specify \"CREATE_NEW\" to fail if the output already exists.")
 	private StandardOpenOption writeMode = TRUNCATE_EXISTING;
@@ -112,7 +113,7 @@ public class Main {
 	private int flush = 0;
 
 	@Parameter(names = {"-c", "--checksum"}, description = "Generate checksum file.", arity = 1)
-	private boolean checksum = true;
+	private boolean checksum = false;
 
 	@Parameter(names = {"-a", "--algorithm"}, description = "Algorithm of the checksum. (cf: \"MD5\", \"SHA-1\")")
 	private String algorithm = "SHA-256";
@@ -127,12 +128,22 @@ public class Main {
 		try (Connection conn = DriverManager.getConnection(jdbcUrl, jdbcUser, StringUtils.chomp(readText(jdbcPass)));
 		     Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(readText(jdbcQuery))) {
 
-			logger.info(String.format("Writing to : %s (mode=%s / encoding=%s)", out, writeMode, encoding));
+			final OutputStream os;
+			final Function<OutputStream, OutputStream> osWrapper;
+			if (outReq.equals("-")) {
+				logger.info(String.format("Writing to stdin (encoding=%s)", encoding));
+				os = System.out;
+				osWrapper = Function.identity();
+			} else {
+				final Path filePath = Paths.get(outReq);
+				logger.info(String.format("Writing to : %s (mode=%s / encoding=%s)", filePath, writeMode, encoding));
+				os = Files.newOutputStream(filePath, CREATE, WRITE, writeMode);
+				osWrapper = src -> wrapOutput(filePath, src);
+			}
 
-			try (OutputStream os = Files.newOutputStream(out, CREATE, WRITE, writeMode);
-			     DigestOutputStream ds = new DigestOutputStream(os, digest);
+			try (DigestOutputStream ds = new DigestOutputStream(os, digest);
 			     CountingOutputStream co = new CountingOutputStream(ds);
-			     Writer writer = new BufferedWriter(new OutputStreamWriter(wrapOutput(out, co), encoding));
+			     Writer writer = new BufferedWriter(new OutputStreamWriter(osWrapper.apply(co), encoding));
 			     CSVWriter csv = new CSVWriter(writer, csvSeparator, csvQuoteChar, csvEscapeChar, csvLineEnd) {
 				     @Override
 				     protected boolean stringContainsSpecialCharacters(String v) {
@@ -178,14 +189,20 @@ public class Main {
 
 				csv.flush();
 				logger.info(String.format("Finished output : %,3d lines (%,3d bytes)", count, co.getBytesWritten()));
+			} finally {
+				os.close();
 			}
 		}
 
 		if (checksum) {
 			String hash = Hex.encodeHexString(digest.digest());
-			Path path = Paths.get(out + "." + digest.getAlgorithm().replaceAll("-", "").toLowerCase(Locale.US));
-			Files.write(path, hash.getBytes(encoding), CREATE, WRITE, writeMode);
-			logger.info(String.format("Generated checksum : %s - %s", path, hash));
+			if (outReq.equals("-")) {
+				System.out.println(hash);
+			} else {
+				Path path = Paths.get(outReq + "." + digest.getAlgorithm().replaceAll("-", "").toLowerCase(Locale.US));
+				Files.write(path, hash.getBytes(encoding), CREATE, WRITE, writeMode);
+				logger.info(String.format("Generated checksum : %s - %s", path, hash));
+			}
 		}
 	}
 
@@ -246,16 +263,24 @@ public class Main {
 		return text;
 	}
 
-	OutputStream wrapOutput(Path path, OutputStream out) throws IOException {
+	OutputStream wrapOutput(Path path, OutputStream out) {
 		String name = path.getFileName().toString();
 		if (name.endsWith(".deflate")) {
 			return new DeflaterOutputStream(out);
 		}
 		if (name.endsWith(".gz")) {
-			return new GZIPOutputStream(out);
+			try {
+				return new GZIPOutputStream(out);
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
 		}
 		if (name.endsWith(".bz2")) {
-			return new BZip2CompressorOutputStream(out);
+			try {
+				return new BZip2CompressorOutputStream(out);
+			} catch (IOException e) {
+				throw new RuntimeException(e);
+			}
 		}
 		return out;
 	}
