@@ -18,13 +18,14 @@ dependencies {
     runtimeOnly 'org.hsqldb:hsqldb:2.+'
     runtimeOnly 'org.postgresql:postgresql:42.+'
     runtimeOnly 'mysql:mysql-connector-java:8.+'
+    runtimeOnly 'com.microsoft.sqlserver:mssql-jdbc:8.4.1.jre8'
     testImplementation 'org.mockito:mockito-core:3.+'
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.+'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.+'
 }
 
 group 'com.after_sunrise.sx8000'
-version '0.4.2-SNAPSHOT'
+version '0.4.5-SNAPSHOT'
 
 sourceCompatibility = 1.8
 targetCompatibility = 1.8
